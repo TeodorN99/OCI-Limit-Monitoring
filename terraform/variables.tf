@@ -7,6 +7,7 @@ variable "provider_oci" {
     region              = string
     config_file_path    = string
     config_file_profile = string
+    auth                = optional(string, "ApiKey")
   })
 }
 

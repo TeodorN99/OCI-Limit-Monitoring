@@ -6,6 +6,7 @@ provider_oci = {
   region              = "eu-amsterdam-1"
   config_file_path    = "~/.oci/config"
   config_file_profile = "DEFAULT"
+  auth                = "ApiKey"
 }
 
 create_project_compartment      = true

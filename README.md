@@ -61,6 +61,7 @@ provider_oci = {
   tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
   region              = "eu-amsterdam-1"
   config_file_profile = "SOFIANE"
+  auth                = "ApiKey"
 }
 
 create_network = true
@@ -113,6 +114,18 @@ terraform init -upgrade
 terraform apply -var-file=sofiane.tfvars
 ```
 
+In OCI Cloud Shell, use instance principal auth instead of a local OCI config file:
+
+```hcl
+provider_oci = {
+  tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+  region              = "eu-frankfurt-1"
+  config_file_path    = ""
+  config_file_profile = ""
+  auth                = "InstancePrincipal"
+}
+```
+
 Save these outputs:
 
 - `project_compartment_id`
@@ -134,6 +147,8 @@ From OCI Cloud Shell, use the Cloud Shell Fn provider. Cloud Shell has the Fn CL
 ```bash
 cd serverless/deployment
 python3 deployment.py \
+  -auth instance_principal \
+  -region eu-frankfurt-1 \
   -profile DEFAULT \
   -fn_provider oracle-cs \
   -container_cli auto \
@@ -158,6 +173,7 @@ From a local machine, use the local Fn provider:
 ```bash
 cd serverless/deployment
 python deployment.py \
+  -auth api_key \
   -profile SOFIANELS \
   -config_file 'C:/Users/Sofiane Mahdjoubi/.oci/config' \
   -fn_provider oracle \

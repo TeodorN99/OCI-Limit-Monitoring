@@ -23,15 +23,17 @@ locals {
 }
 
 provider "oci" {
+  auth                = var.provider_oci.auth
   tenancy_ocid        = var.provider_oci.tenancy
-  config_file_profile = var.provider_oci.config_file_profile
+  config_file_profile = var.provider_oci.auth == "ApiKey" ? var.provider_oci.config_file_profile : null
   region              = var.provider_oci.region
 }
 
 provider "oci" {
   alias               = "home"
+  auth                = var.provider_oci.auth
   tenancy_ocid        = var.provider_oci.tenancy
-  config_file_profile = var.provider_oci.config_file_profile
+  config_file_profile = var.provider_oci.auth == "ApiKey" ? var.provider_oci.config_file_profile : null
   region              = lookup(local.region_map, data.oci_identity_tenancy.this.home_region_key)
 }
 

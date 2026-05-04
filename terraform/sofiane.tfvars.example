@@ -3,7 +3,17 @@ provider_oci = {
   region              = "eu-paris-1"
   config_file_path    = "~/.oci/config"
   config_file_profile = "SOFIANELS"
+  auth                = "ApiKey"
 }
+
+# For OCI Cloud Shell, use instance principal auth instead:
+# provider_oci = {
+#   tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+#   region              = "eu-frankfurt-1"
+#   config_file_path    = ""
+#   config_file_profile = ""
+#   auth                = "InstancePrincipal"
+# }
 
 create_project_compartment      = true
 project_compartment_key         = "limit_monitoring"

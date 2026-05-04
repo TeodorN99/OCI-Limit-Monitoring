@@ -77,9 +77,19 @@ def preflight(args):
     return get_container_cli(args.container_cli)
 
 
-def initialize(profile_name, config_file):
+def get_oci_auth(auth, profile_name, config_file, region):
+    if auth == "api_key":
+        return from_file(file_location=config_file, profile_name=profile_name), None
+
+    signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+    if not region:
+        raise RuntimeError("Instance principal auth requires -region or OCI_REGION/OCI_CLI_REGION.")
+    return {"region": region, "tenancy": signer.tenancy_id}, signer
+
+
+def initialize(auth, profile_name, config_file, region):
     """Creates OCI SDK clients in the tenancy home region."""
-    config = from_file(file_location=config_file, profile_name=profile_name)
+    config, signer = get_oci_auth(auth, profile_name, config_file, region)
 
     global identity_client
     global fn_mgmt_client
@@ -87,16 +97,17 @@ def initialize(profile_name, config_file):
     global schedule_client
     global search_client
 
-    identity_client = oci.identity.IdentityClient(config)
+    client_kwargs = {"signer": signer} if signer else {}
+    identity_client = oci.identity.IdentityClient(config, **client_kwargs)
     regions = identity_client.list_region_subscriptions(config["tenancy"]).data
     home_region = [region for region in regions if region.is_home_region][0]
 
     config["region"] = home_region.region_name
-    identity_client = oci.identity.IdentityClient(config)
-    fn_mgmt_client = oci.functions.FunctionsManagementClient(config)
-    os_client = oci.object_storage.ObjectStorageClient(config)
-    schedule_client = oci.resource_scheduler.ScheduleClient(config)
-    search_client = oci.resource_search.ResourceSearchClient(config)
+    identity_client = oci.identity.IdentityClient(config, **client_kwargs)
+    fn_mgmt_client = oci.functions.FunctionsManagementClient(config, **client_kwargs)
+    os_client = oci.object_storage.ObjectStorageClient(config, **client_kwargs)
+    schedule_client = oci.resource_scheduler.ScheduleClient(config, **client_kwargs)
+    search_client = oci.resource_search.ResourceSearchClient(config, **client_kwargs)
 
     return config, home_region
 
@@ -271,8 +282,10 @@ if __name__ == "__main__":
         formatter_class=argparse.RawTextHelpFormatter,
         description="Deploys one OCI limit monitoring function and schedules it with OCI Resource Scheduler.",
     )
-    parser.add_argument("-profile", dest="profile", default="DEFAULT", help="OCI config profile name.")
+    parser.add_argument("-auth", dest="auth", default="api_key", choices=["api_key", "instance_principal"], help="OCI SDK auth mode.")
+    parser.add_argument("-profile", dest="profile", default="DEFAULT", help="OCI config profile name for api_key auth.")
     parser.add_argument("-config_file", dest="config_file", default=os.path.expanduser("~/.oci/config"), help="OCI config file path.")
+    parser.add_argument("-region", dest="region", default=os.environ.get("OCI_REGION") or os.environ.get("OCI_CLI_REGION") or "", help="Region used to bootstrap instance_principal auth.")
     parser.add_argument("-user", dest="user", type=str, default="", help="OCIR user. Usually tenancy_namespace/user_email.")
     parser.add_argument("-password", dest="password", type=str, default="", help="OCIR auth token.")
     parser.add_argument("-compartment_id", dest="compartment_id", type=str, required=True, help="Compartment OCID for the Functions app and schedule.")
@@ -296,7 +309,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     container_cli = preflight(args)
-    config, home_region = initialize(args.profile, args.config_file)
+    config, home_region = initialize(args.auth, args.profile, args.config_file, args.region)
     configure_fn_context(args, config, home_region, container_cli)
     fn_dir = write_func_yaml(
         args.function_name,
