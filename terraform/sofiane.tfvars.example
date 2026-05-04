@@ -22,8 +22,9 @@ project_compartment_description = "Resources for OCI limit monitoring."
 
 compartment_ids = {}
 
-create_network          = true
-network_compartment_key = "limit_monitoring"
+create_network            = true
+enable_private_nat_egress = true
+network_compartment_key   = "limit_monitoring"
 network = {
   vcn_name                   = "limit-monitoring-vcn"
   vcn_cidr                   = "10.42.0.0/16"

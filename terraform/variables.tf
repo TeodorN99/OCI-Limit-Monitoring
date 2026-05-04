@@ -46,6 +46,11 @@ variable "create_network" {
   default = true
 }
 
+variable "enable_private_nat_egress" {
+  type    = bool
+  default = true
+}
+
 variable "network_compartment_key" {
   type    = string
   default = "limit_monitoring"

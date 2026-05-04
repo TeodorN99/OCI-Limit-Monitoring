@@ -11,3 +11,7 @@ output "subnet_ids" {
 output "service_gateway_id" {
   value = oci_core_service_gateway.this.id
 }
+
+output "nat_gateway_id" {
+  value = try(oci_core_nat_gateway.this[0].id, null)
+}

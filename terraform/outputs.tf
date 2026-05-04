@@ -20,7 +20,9 @@ output "project_compartment_id" {
 
 output "network" {
   value = var.create_network ? {
-    vcn_id     = module.network[0].vcn_id
-    subnet_ids = module.network[0].subnet_ids
+    vcn_id             = module.network[0].vcn_id
+    subnet_ids         = module.network[0].subnet_ids
+    service_gateway_id = module.network[0].service_gateway_id
+    nat_gateway_id     = module.network[0].nat_gateway_id
   } : null
 }

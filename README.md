@@ -19,7 +19,7 @@ The function runs in the home region, but creates regional OCI SDK clients while
 ## What Terraform Creates
 
 - Optional project compartment.
-- Private VCN, private regional subnet, service gateway, route table, and security list for OCI Functions.
+- Private VCN, private regional subnet, service gateway, NAT gateway, route table, and security list for OCI Functions.
 - OCI Functions application in the tenancy home region.
 - OCI Logging log group and Function Invocation Logs for the Functions application.
 - OCI Notifications topic and subscription.
@@ -168,7 +168,8 @@ provider_oci = {
   auth                = "ApiKey"
 }
 
-create_network = true
+create_network            = true
+enable_private_nat_egress = true
 network = {
   vcn_name                   = "limit-monitoring-vcn"
   vcn_cidr                   = "10.42.0.0/16"
@@ -198,7 +199,15 @@ compartment_ids = {
 }
 ```
 
-By default, Terraform also creates a private VCN for Functions. It does not create a public subnet or internet gateway. The private subnet routes Oracle service traffic through a service gateway to `All <region> Services In Oracle Services Network`, which lets the function reach OCI APIs and OCIR without public internet exposure.
+By default, Terraform also creates a private VCN for Functions. It does not create a public subnet or internet gateway. The private subnet routes same-region Oracle service traffic through a service gateway to `All <region> Services In Oracle Services Network`.
+
+Because the function can check every subscribed OCI region from one home-region function, Terraform also creates a NAT gateway by default. This keeps the subnet private while allowing outbound HTTPS to cross-region OCI API endpoints such as `limits.eu-frankfurt-1.oci.oraclecloud.com`.
+
+If you only check the function home region and do not need outbound public HTTPS, you can disable NAT creation:
+
+```hcl
+enable_private_nat_egress = false
+```
 
 To reuse an existing private subnet instead, set:
 

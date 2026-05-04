@@ -59,6 +59,7 @@ module "network" {
   source    = "./modules/network"
 
   compartment_id             = local.compartment_ids[var.network_compartment_key]
+  enable_nat_gateway         = var.enable_private_nat_egress
   vcn_name                   = var.network.vcn_name
   vcn_cidr                   = var.network.vcn_cidr
   vcn_dns_label              = var.network.vcn_dns_label

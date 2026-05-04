@@ -40,6 +40,14 @@ resource "oci_core_service_gateway" "this" {
   }
 }
 
+resource "oci_core_nat_gateway" "this" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  compartment_id = var.compartment_id
+  display_name   = "${var.vcn_name}-nat-gateway"
+  vcn_id         = oci_core_vcn.this.id
+}
+
 resource "oci_core_route_table" "private" {
   compartment_id = var.compartment_id
   display_name   = "${var.vcn_name}-private-routes"
@@ -49,6 +57,16 @@ resource "oci_core_route_table" "private" {
     destination       = local.oracle_services_cidr
     destination_type  = "SERVICE_CIDR_BLOCK"
     network_entity_id = oci_core_service_gateway.this.id
+  }
+
+  dynamic "route_rules" {
+    for_each = var.enable_nat_gateway ? [1] : []
+
+    content {
+      destination       = "0.0.0.0/0"
+      destination_type  = "CIDR_BLOCK"
+      network_entity_id = oci_core_nat_gateway.this[0].id
+    }
   }
 }
 
@@ -63,6 +81,22 @@ resource "oci_core_security_list" "functions" {
     destination_type = "SERVICE_CIDR_BLOCK"
     protocol         = "all"
     stateless        = true
+  }
+
+  dynamic "egress_security_rules" {
+    for_each = var.enable_nat_gateway ? [1] : []
+
+    content {
+      description      = "Allow private HTTPS egress through NAT for cross-region OCI API endpoints."
+      destination      = "0.0.0.0/0"
+      destination_type = "CIDR_BLOCK"
+      protocol         = "6"
+
+      tcp_options {
+        min = 443
+        max = 443
+      }
+    }
   }
 
   ingress_security_rules {
