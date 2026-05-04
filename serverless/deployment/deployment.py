@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import oci
@@ -126,16 +127,40 @@ def initialize(auth, profile_name, config_file, region, tenancy_id):
     return config, home_region
 
 
-def get_function(function_name):
-    structured_search = oci.resource_search.models.StructuredSearchDetails(
-        query="query functionsfunction resources where displayName='{}'".format(function_name),
-        type="Structured",
-        matching_context_type=oci.resource_search.models.SearchDetails.MATCHING_CONTEXT_TYPE_NONE,
+def get_application(compartment_id, app_name):
+    applications = list_call_get_all_results(
+        fn_mgmt_client.list_applications,
+        compartment_id=compartment_id,
+        display_name=app_name,
+    ).data
+    if not applications:
+        raise RuntimeError("Unable to find Functions application '{}'".format(app_name))
+    return applications[0]
+
+
+def get_function(compartment_id, app_name, function_name, attempts=12, delay_seconds=5):
+    application = get_application(compartment_id, app_name)
+    for attempt in range(1, attempts + 1):
+        functions = list_call_get_all_results(
+            fn_mgmt_client.list_functions,
+            application_id=application.id,
+            display_name=function_name,
+        ).data
+        if functions:
+            return functions[0]
+
+        print(
+            "[INFO] Waiting for function '{}' to become visible ({}/{})".format(
+                function_name, attempt, attempts
+            )
+        )
+        time.sleep(delay_seconds)
+
+    raise RuntimeError(
+        "Unable to find deployed function '{}' in app '{}'".format(
+            function_name, app_name
+        )
     )
-    functions = search_client.search_resources(structured_search).data.items
-    if not functions:
-        raise RuntimeError("Unable to find deployed function '{}'".format(function_name))
-    return functions[0]
 
 
 def write_func_yaml(function_name, topic_id, percentage, regions, services, timeout, memory):
@@ -339,7 +364,7 @@ if __name__ == "__main__":
     print("[INFO] Deploying single all-regions function {}".format(args.function_name))
     run(["fn", "deploy", "--app", args.app_name], cwd=fn_dir)
 
-    function = get_function(args.function_name)
+    function = get_function(args.compartment_id, args.app_name, args.function_name)
     schedule = create_or_update_schedule(
         args.compartment_id,
         function.identifier,
