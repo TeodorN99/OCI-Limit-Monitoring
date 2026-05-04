@@ -8,3 +8,17 @@ output "apps" {
     app.display_name => app.id
   }
 }
+
+output "invocation_log_groups" {
+  value = {
+    for key, log_group in oci_logging_log_group.function_invocation :
+    oci_functions_application.this[key].display_name => log_group.id
+  }
+}
+
+output "invocation_logs" {
+  value = {
+    for key, log in oci_logging_log.function_invocation :
+    oci_functions_application.this[key].display_name => log.id
+  }
+}

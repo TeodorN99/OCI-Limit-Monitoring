@@ -17,3 +17,13 @@ variable "app_params" {
     freeform_tags    = map(string)
   }))
 }
+
+variable "enable_invocation_logs" {
+  type    = bool
+  default = true
+}
+
+variable "invocation_log_retention_duration" {
+  type    = number
+  default = 30
+}

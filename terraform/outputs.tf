@@ -6,6 +6,14 @@ output "apps" {
   value = module.functions.apps
 }
 
+output "function_invocation_log_groups" {
+  value = module.functions.invocation_log_groups
+}
+
+output "function_invocation_logs" {
+  value = module.functions.invocation_logs
+}
+
 output "project_compartment_id" {
   value = local.compartment_ids[var.project_compartment_key]
 }

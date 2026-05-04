@@ -21,6 +21,7 @@ The function runs in the home region, but creates regional OCI SDK clients while
 - Optional project compartment.
 - Private VCN, private regional subnet, service gateway, route table, and security list for OCI Functions.
 - OCI Functions application in the tenancy home region.
+- OCI Logging log group and Function Invocation Logs for the Functions application.
 - OCI Notifications topic and subscription.
 - Dynamic group and policy for the function resource principal.
 
@@ -94,6 +95,7 @@ Save the Terraform outputs:
 terraform output project_compartment_id
 terraform output topic
 terraform output apps
+terraform output function_invocation_logs
 ```
 
 Confirm the OCI Notifications email subscription before expecting alert emails.
@@ -135,6 +137,15 @@ Run a manual test:
 
 ```bash
 fn invoke limit-monitoring-app limit-monitoring
+```
+
+Query recent invocation logs after a test run:
+
+```bash
+oci logging-search search-logs \
+  --search-query "search '<project_compartment_id>/<function_invocation_log_ocid>' | sort by datetime desc" \
+  --time-start "$(date -u -d '-30 minutes' +%Y-%m-%dT%H:%M:%SZ)" \
+  --time-end "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
 
 ## Configure Terraform
@@ -225,6 +236,7 @@ Save these outputs:
 - `project_compartment_id`
 - `apps["limit-monitoring-app"]`
 - `topic["limit-monitoring-topic"]`
+- `function_invocation_logs["limit-monitoring-app"]`
 
 ## Deploy the Function and Schedule
 
@@ -343,6 +355,21 @@ The deployment script writes [serverless/fn/func.yaml](./serverless/fn/func.yaml
 - `regions`: Optional comma-separated region allowlist.
 - `services`: Comma-separated service allowlist. Empty uses the default allowlist; `all` scans every service.
 - `max_workers`: Maximum concurrent resource availability calls. Default is `8`.
+
+## Function Invocation Logs
+
+Terraform enables OCI Logging for the Functions application by default. It creates:
+
+- A log group named `<application-name>-logs`.
+- A service log named `<application-name>_invoke`.
+- 30-day retention by default.
+
+Override the defaults in your Terraform variables file if needed:
+
+```hcl
+enable_function_invocation_logs              = true
+function_invocation_log_retention_duration   = 30
+```
 
 ## Notes
 

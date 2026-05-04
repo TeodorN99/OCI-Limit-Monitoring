@@ -68,11 +68,13 @@ module "network" {
 }
 
 module "functions" {
-  providers       = { oci = oci.home }
-  source          = "./modules/functions"
-  compartment_ids = local.compartment_ids
-  subnet_ids      = local.subnet_ids
-  app_params      = var.app_params
+  providers                         = { oci = oci.home }
+  source                            = "./modules/functions"
+  compartment_ids                   = local.compartment_ids
+  subnet_ids                        = local.subnet_ids
+  app_params                        = var.app_params
+  enable_invocation_logs            = var.enable_function_invocation_logs
+  invocation_log_retention_duration = var.function_invocation_log_retention_duration
 }
 
 resource "oci_identity_dynamic_group" "functions" {

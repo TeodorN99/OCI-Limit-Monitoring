@@ -81,6 +81,16 @@ variable "app_params" {
   }))
 }
 
+variable "enable_function_invocation_logs" {
+  type    = bool
+  default = true
+}
+
+variable "function_invocation_log_retention_duration" {
+  type    = number
+  default = 30
+}
+
 variable "topic_params" {
   type = map(object({
     comp_name   = string

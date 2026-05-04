@@ -43,6 +43,9 @@ app_params = {
   }
 }
 
+enable_function_invocation_logs            = true
+function_invocation_log_retention_duration = 30
+
 topic_params = {
   "limit-monitoring-topic" = {
     comp_name   = "limit_monitoring"
