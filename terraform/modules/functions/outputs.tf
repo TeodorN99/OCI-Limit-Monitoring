@@ -4,7 +4,7 @@
 
 output "apps" {
   value = {
-    for app in oci_functions_application.this:
+    for app in oci_functions_application.this :
     app.display_name => app.id
   }
 }

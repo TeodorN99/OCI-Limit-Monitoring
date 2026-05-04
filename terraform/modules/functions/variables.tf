@@ -14,6 +14,6 @@ variable "app_params" {
     subnet_name      = list(string)
     display_name     = string
     config           = map(string)
-    freeform_tags    = map(string)    
+    freeform_tags    = map(string)
   }))
 }

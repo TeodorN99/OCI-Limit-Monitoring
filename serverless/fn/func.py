@@ -17,7 +17,6 @@ search_client = None
 logger = None
 identity_client = None
 notifications_client = None
-os_client = None
 
 
 def create_log():
@@ -66,7 +65,6 @@ def initialize(region=None):
 
     notifications_client - Client used for making notifications requests
 
-    os_client - Client used for making object storage requests
     """
 
     signer = oci.auth.signers.get_resource_principals_signer()
@@ -76,7 +74,6 @@ def initialize(region=None):
     global search_client
     global identity_client
     global notifications_client
-    global os_client
     identity_client = oci.identity.IdentityClient({}, signer=signer)
     response = identity_client.list_region_subscriptions(signer.tenancy_id)
     for reg in response.data:
@@ -84,8 +81,6 @@ def initialize(region=None):
             quotas_client = oci.limits.QuotasClient(
                 config={"region": reg.region_name}, signer=signer)
             notifications_client = oci.ons.NotificationDataPlaneClient(
-                config={"region": reg.region_name}, signer=signer)
-            os_client = oci.object_storage.ObjectStorageClient(
                 config={"region": reg.region_name}, signer=signer)
             break
 
@@ -101,7 +96,7 @@ def initialize(region=None):
         search_client = oci.resource_search.ResourceSearchClient(
             {}, signer=signer)
         identity_client = oci.identity.IdentityClient({}, signer=signer)
-    return signer, limits_client, quotas_client, search_client, identity_client, notifications_client, os_client
+    return signer, limits_client, quotas_client, search_client, identity_client, notifications_client
 
 
 def is_throttling_error(err):
@@ -320,13 +315,12 @@ def check_limits(tenancy, topic_id, region, percentage, services):
 
 
 def main(regions, topic_id, percentage, services):
-    signer, limits_client, quotas_client, search_client, identity_client, notifications_client, os_client = initialize()
+    signer, limits_client, quotas_client, search_client, identity_client, notifications_client = initialize()
     tenancy = signer.tenancy_id
     region_data = identity_client.list_region_subscriptions(tenancy)
-    namespace = os_client.get_namespace().data
     limits = []
     for reg in region_data.data:
-        signer, limits_client, quotas_client, search_client, identity_client, notifications_client, os_client = initialize(
+        signer, limits_client, quotas_client, search_client, identity_client, notifications_client = initialize(
             region=reg.region_name)
         if len(regions) == 0:
             limit_values = check_limits(
@@ -334,14 +328,14 @@ def main(regions, topic_id, percentage, services):
             limits.append(limit_values)
         else:
             if ',' not in regions:
-                region_list = regions
+                region_list = [regions]
             else:
-                region_list = regions.split(',')
+                region_list = [region.strip() for region in regions.split(',') if region.strip()]
             if reg.region_name in region_list:
                 limit_values = check_limits(
                     tenancy, topic_id, reg.region_name, percentage, services)
                 limits.append(limit_values)
-    return limits, namespace
+    return limits
 
 
 def handler(ctx, data: io.BytesIO = None):
@@ -356,17 +350,13 @@ def handler(ctx, data: io.BytesIO = None):
     else:
         topic_id = config["topic_id"]
 
-    if "services" in config:
-        if ',' not in config["services"]:
-            services = config["services"]
-        else:
-            services = config["services"].split(',')
-    else:
-        services = []
+    services = [service.strip()
+                for service in config.get("services", "").split(",")
+                if service.strip()]
 
     create_log()
 
-    limits, namespace = main(regions, topic_id, int(percentage), services)
+    limits = main(regions, topic_id, int(percentage), services)
 
     return response.Response(
         ctx, response_data=json.dumps(limits),

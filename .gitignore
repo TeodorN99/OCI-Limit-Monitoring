@@ -1,3 +1,6 @@
 *tfstate*
 .DS_Store
 .terraform
+terraform/tfplan
+terraform/*.tfplan
+terraform/sofiane.tfvars
