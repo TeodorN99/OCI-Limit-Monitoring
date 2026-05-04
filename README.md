@@ -39,14 +39,105 @@ Terraform does not deploy the function image. The deployment script uses the Fn 
 
 ## Prerequisites
 
-- Terraform `>= 1.3.0`
-- Docker
-- Fn CLI
-- OCI CLI/SDK config profile. A sample profile-based variable file is provided for `SOFIANE`.
+- OCI Cloud Shell is recommended. It already includes Terraform, OCI CLI, Fn CLI, and a container engine.
 - IAM permissions to manage compartments, Functions, Notifications, dynamic groups, policies, and Resource Scheduler schedules.
-- An OCIR auth token for container registry login, unless the deployment environment is already authenticated to push to OCIR.
+- An OCIR auth token for container registry login.
+
+For local deployment instead of Cloud Shell, you also need Terraform `>= 1.3.0`, Docker or Podman, Fn CLI, and an OCI SDK config profile.
+
+## Recommended Cloud Shell Deployment
+
+Clone the branch:
+
+```bash
+git clone -b modernize-resource-scheduler <your-repo-url>
+cd OCI-Limit-Monitoring
+```
+
+Install the Python deployment dependencies:
+
+```bash
+python3 -m pip install -r serverless/deployment/requirements.txt --user
+```
+
+Create and edit your local Terraform variables file:
+
+```bash
+cp terraform/sofiane.tfvars.example terraform/sofiane.tfvars
+vi terraform/sofiane.tfvars
+```
+
+In Cloud Shell, use Cloud Shell auth in `terraform/sofiane.tfvars`:
+
+```hcl
+provider_oci = {
+  tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+  region              = "eu-paris-1"
+  config_file_path    = ""
+  config_file_profile = ""
+  auth                = "InstancePrincipal"
+}
+```
+
+Deploy the Terraform resources:
+
+```bash
+cd terraform
+terraform init -upgrade
+terraform plan -var-file sofiane.tfvars -out tfplan
+terraform apply tfplan
+```
+
+Save the Terraform outputs:
+
+```bash
+terraform output project_compartment_id
+terraform output topic
+terraform output apps
+```
+
+Confirm the OCI Notifications email subscription before expecting alert emails.
+
+Read your OCIR auth token without writing it to shell history:
+
+```bash
+read -s OCIR_TOKEN
+```
+
+Deploy the function image and Resource Scheduler schedule:
+
+```bash
+cd ../serverless/deployment
+
+python3 deployment.py \
+  -tenancy_id '<tenancy_ocid>' \
+  -auth cloud_shell \
+  -region eu-paris-1 \
+  -fn_provider oracle-cs \
+  -container_cli auto \
+  -user '<tenancy_namespace>/<user_email>' \
+  -password "$OCIR_TOKEN" \
+  -compartment_id '<project_compartment_id>' \
+  -app_name 'limit-monitoring-app' \
+  -topic_id '<topic_ocid>' \
+  -percentage 90
+```
+
+For example, the OCIR user format is:
+
+```text
+<tenancy_namespace>/<user_email>
+```
+
+Run a manual test:
+
+```bash
+fn invoke limit-monitoring-app limit-monitoring
+```
 
 ## Configure Terraform
+
+This section is useful for local deployments or for adjusting the Terraform variables beyond the Cloud Shell quick path.
 
 Create your local variables file from the example, then edit it:
 
@@ -111,7 +202,8 @@ Apply Terraform:
 ```bash
 cd terraform
 terraform init -upgrade
-terraform apply -var-file=sofiane.tfvars
+terraform plan -var-file sofiane.tfvars -out tfplan
+terraform apply tfplan
 ```
 
 In OCI Cloud Shell, use instance principal auth instead of a local OCI config file:
