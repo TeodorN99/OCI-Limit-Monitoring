@@ -120,7 +120,9 @@ python3 deployment.py \
   -compartment_id '<project_compartment_id>' \
   -app_name 'limit-monitoring-app' \
   -topic_id '<topic_ocid>' \
-  -percentage 90
+  -percentage 90 \
+  -services 'compute,block-storage,vcn,load-balancer,database' \
+  -max_workers 8
 ```
 
 For example, the OCIR user format is:
@@ -250,7 +252,9 @@ python3 deployment.py \
   -compartment_id '<project_compartment_id>' \
   -app_name 'limit-monitoring-app' \
   -topic_id '<topic_ocid>' \
-  -percentage 90
+  -percentage 90 \
+  -services 'compute,block-storage,vcn,load-balancer,database' \
+  -max_workers 8
 ```
 
 Oracle's Cloud Shell Functions quickstart still tells you to generate an auth token and log in to OCIR before deploying. So in most tenancies, you should expect to provide `-user` and `-password` even from Cloud Shell.
@@ -275,7 +279,9 @@ python deployment.py \
   -compartment_id '<project_compartment_id>' \
   -app_name 'limit-monitoring-app' \
   -topic_id '<topic_ocid>' \
-  -percentage 90
+  -percentage 90 \
+  -services 'compute,block-storage,vcn,load-balancer,database' \
+  -max_workers 8
 ```
 
 The default schedule is every Monday at `07:00 UTC`:
@@ -306,6 +312,26 @@ Check only specific OCI services:
 -services 'compute,block-storage'
 ```
 
+If `services` is omitted, the function uses this default allowlist:
+
+```text
+compute,block-storage,vcn,load-balancer,database
+```
+
+Use the OCI Limits programmatic service names exactly as returned by `oci limits service list`.
+
+To scan every service, use:
+
+```bash
+-services 'all'
+```
+
+Control the number of concurrent `GetResourceAvailability` calls:
+
+```bash
+-max_workers 8
+```
+
 If `regions` is omitted, all subscribed regions are checked.
 
 ## Function Configuration
@@ -315,7 +341,8 @@ The deployment script writes [serverless/fn/func.yaml](./serverless/fn/func.yaml
 - `percentage`: Alert threshold.
 - `topic_id`: OCI Notifications topic OCID.
 - `regions`: Optional comma-separated region allowlist.
-- `services`: Optional comma-separated service allowlist.
+- `services`: Comma-separated service allowlist. Empty uses the default allowlist; `all` scans every service.
+- `max_workers`: Maximum concurrent resource availability calls. Default is `8`.
 
 ## Notes
 

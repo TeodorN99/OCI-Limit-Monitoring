@@ -8,3 +8,5 @@ timeout: 300
 config:
   percentage: "90"
   topic_id: ocid1.onstopic.oc1..replace-with-topic-ocid
+  max_workers: "8"
+  services: compute,block-storage,vcn,load-balancer,database

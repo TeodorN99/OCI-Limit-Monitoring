@@ -18,6 +18,9 @@ os_client = None
 schedule_client = None
 search_client = None
 
+DEFAULT_SERVICES = "compute,block-storage,vcn,load-balancer,database"
+DEFAULT_MAX_WORKERS = 8
+
 
 def safe_name(value):
     return re.sub(r"[^A-Za-z0-9_]", "_", value)[:100]
@@ -163,7 +166,7 @@ def get_function(compartment_id, app_name, function_name, attempts=12, delay_sec
     )
 
 
-def write_func_yaml(function_name, topic_id, percentage, regions, services, timeout, memory):
+def write_func_yaml(function_name, topic_id, percentage, regions, services, max_workers, timeout, memory):
     fn_config = """schema_version: 20180708
 name: {{ function_name }}
 version: 0.1.0
@@ -174,6 +177,7 @@ timeout: {{ timeout }}
 config:
   percentage: "{{ percentage }}"
   topic_id: {{ topic_id }}
+  max_workers: "{{ max_workers }}"
 {% if regions %}  regions: {{ regions }}
 {% endif %}{% if services %}  services: {{ services }}
 {% endif %}"""
@@ -183,6 +187,7 @@ config:
         percentage=percentage,
         regions=regions,
         services=services,
+        max_workers=max_workers,
         timeout=timeout,
         memory=memory,
     )
@@ -352,7 +357,8 @@ if __name__ == "__main__":
     parser.add_argument("-percentage", dest="percentage", type=int, required=True, help="Alert threshold percentage.")
     parser.add_argument("-function_name", dest="function_name", default="limit-monitoring", help="Function name to deploy.")
     parser.add_argument("-regions", dest="regions", default="", help="Optional comma-separated region list. Empty means all subscribed regions.")
-    parser.add_argument("-services", dest="services", default="", help="Optional comma-separated OCI service names to check.")
+    parser.add_argument("-services", dest="services", default=DEFAULT_SERVICES, help="Comma-separated OCI service names to check. Use 'all' to scan every service.")
+    parser.add_argument("-max_workers", dest="max_workers", type=int, default=DEFAULT_MAX_WORKERS, help="Maximum concurrent GetResourceAvailability calls.")
     parser.add_argument("-schedule_name", dest="schedule_name", default="limit-monitoring-weekly", help="Resource Scheduler schedule name.")
     parser.add_argument("-recurrence_type", dest="recurrence_type", default="CRON", choices=["CRON", "ICAL"], help="Resource Scheduler recurrence type.")
     parser.add_argument("-recurrence_details", dest="recurrence_details", default="0 7 * * 1", help="UTC recurrence. Default is every Monday at 07:00 UTC.")
@@ -374,6 +380,7 @@ if __name__ == "__main__":
         args.percentage,
         args.regions,
         args.services,
+        args.max_workers,
         args.timeout,
         args.memory,
     )
