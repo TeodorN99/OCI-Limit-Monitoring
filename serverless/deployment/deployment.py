@@ -81,11 +81,23 @@ def get_oci_auth(auth, profile_name, config_file, region, tenancy_id):
     if auth == "api_key":
         return from_file(file_location=config_file, profile_name=profile_name), None
 
-    signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
     if not region:
-        raise RuntimeError("Instance principal auth requires -region or OCI_REGION/OCI_CLI_REGION.")
+        raise RuntimeError("{} auth requires -region or OCI_REGION/OCI_CLI_REGION.".format(auth))
     if not tenancy_id:
-        raise RuntimeError("Instance principal auth requires -tenancy_id.")
+        raise RuntimeError("{} auth requires -tenancy_id.".format(auth))
+
+    if auth == "cloud_shell":
+        delegation_token_path = "/etc/oci/delegation_token"
+        if not os.path.exists(delegation_token_path):
+            raise RuntimeError("Cloud Shell auth requires {}.".format(delegation_token_path))
+        with open(delegation_token_path, "r", encoding="utf-8") as token_file:
+            delegation_token = token_file.read().strip()
+        signer = oci.auth.signers.InstancePrincipalsDelegationTokenSigner(
+            delegation_token=delegation_token
+        )
+        return {"region": region, "tenancy": tenancy_id}, signer
+
+    signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
     return {"region": region, "tenancy": tenancy_id}, signer
 
 
@@ -284,11 +296,11 @@ if __name__ == "__main__":
         formatter_class=argparse.RawTextHelpFormatter,
         description="Deploys one OCI limit monitoring function and schedules it with OCI Resource Scheduler.",
     )
-    parser.add_argument("-auth", dest="auth", default="api_key", choices=["api_key", "instance_principal"], help="OCI SDK auth mode.")
+    parser.add_argument("-auth", dest="auth", default="api_key", choices=["api_key", "cloud_shell", "instance_principal"], help="OCI SDK auth mode.")
     parser.add_argument("-profile", dest="profile", default="DEFAULT", help="OCI config profile name for api_key auth.")
     parser.add_argument("-config_file", dest="config_file", default=os.path.expanduser("~/.oci/config"), help="OCI config file path.")
-    parser.add_argument("-region", dest="region", default=os.environ.get("OCI_REGION") or os.environ.get("OCI_CLI_REGION") or "", help="Region used to bootstrap instance_principal auth.")
-    parser.add_argument("-tenancy_id", dest="tenancy_id", default="", help="Tenancy OCID. Required for instance_principal auth.")
+    parser.add_argument("-region", dest="region", default=os.environ.get("OCI_REGION") or os.environ.get("OCI_CLI_REGION") or "", help="Region used to bootstrap cloud_shell or instance_principal auth.")
+    parser.add_argument("-tenancy_id", dest="tenancy_id", default="", help="Tenancy OCID. Required for cloud_shell and instance_principal auth.")
     parser.add_argument("-user", dest="user", type=str, default="", help="OCIR user. Usually tenancy_namespace/user_email.")
     parser.add_argument("-password", dest="password", type=str, default="", help="OCIR auth token.")
     parser.add_argument("-compartment_id", dest="compartment_id", type=str, required=True, help="Compartment OCID for the Functions app and schedule.")

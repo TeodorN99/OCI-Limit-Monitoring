@@ -147,7 +147,7 @@ From OCI Cloud Shell, use the Cloud Shell Fn provider. Cloud Shell has the Fn CL
 ```bash
 cd serverless/deployment
 python3 deployment.py \
-  -auth instance_principal \
+  -auth cloud_shell \
   -region eu-frankfurt-1 \
   -tenancy_id '<tenancy_ocid>' \
   -profile DEFAULT \
