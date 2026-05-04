@@ -199,7 +199,15 @@ def configure_fn_context(args, config, home_region, container_cli):
     if context_name not in contexts:
         run(["fn", "create", "context", context_name, "--provider", args.fn_provider])
 
-    run(["fn", "use", "context", context_name])
+    context_is_active = any(
+        line.lstrip().startswith("*") and context_name in line
+        for line in contexts.splitlines()
+    )
+    if not context_is_active:
+        run(["fn", "use", "context", context_name])
+    else:
+        print("[INFO] Fn context {} is already active.".format(context_name))
+
     run(["fn", "update", "context", "oracle.compartment-id", args.compartment_id])
     run(["fn", "update", "context", "oracle.image-compartment-id", args.image_compartment_id or args.compartment_id])
     run(["fn", "update", "context", "api-url", "https://functions.{}.oci.oraclecloud.com".format(home_region.region_name)])
