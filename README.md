@@ -149,6 +149,7 @@ cd serverless/deployment
 python3 deployment.py \
   -auth instance_principal \
   -region eu-frankfurt-1 \
+  -tenancy_id '<tenancy_ocid>' \
   -profile DEFAULT \
   -fn_provider oracle-cs \
   -container_cli auto \

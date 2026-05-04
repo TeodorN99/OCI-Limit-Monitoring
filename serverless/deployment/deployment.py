@@ -77,19 +77,21 @@ def preflight(args):
     return get_container_cli(args.container_cli)
 
 
-def get_oci_auth(auth, profile_name, config_file, region):
+def get_oci_auth(auth, profile_name, config_file, region, tenancy_id):
     if auth == "api_key":
         return from_file(file_location=config_file, profile_name=profile_name), None
 
     signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
     if not region:
         raise RuntimeError("Instance principal auth requires -region or OCI_REGION/OCI_CLI_REGION.")
-    return {"region": region, "tenancy": signer.tenancy_id}, signer
+    if not tenancy_id:
+        raise RuntimeError("Instance principal auth requires -tenancy_id.")
+    return {"region": region, "tenancy": tenancy_id}, signer
 
 
-def initialize(auth, profile_name, config_file, region):
+def initialize(auth, profile_name, config_file, region, tenancy_id):
     """Creates OCI SDK clients in the tenancy home region."""
-    config, signer = get_oci_auth(auth, profile_name, config_file, region)
+    config, signer = get_oci_auth(auth, profile_name, config_file, region, tenancy_id)
 
     global identity_client
     global fn_mgmt_client
@@ -286,6 +288,7 @@ if __name__ == "__main__":
     parser.add_argument("-profile", dest="profile", default="DEFAULT", help="OCI config profile name for api_key auth.")
     parser.add_argument("-config_file", dest="config_file", default=os.path.expanduser("~/.oci/config"), help="OCI config file path.")
     parser.add_argument("-region", dest="region", default=os.environ.get("OCI_REGION") or os.environ.get("OCI_CLI_REGION") or "", help="Region used to bootstrap instance_principal auth.")
+    parser.add_argument("-tenancy_id", dest="tenancy_id", default="", help="Tenancy OCID. Required for instance_principal auth.")
     parser.add_argument("-user", dest="user", type=str, default="", help="OCIR user. Usually tenancy_namespace/user_email.")
     parser.add_argument("-password", dest="password", type=str, default="", help="OCIR auth token.")
     parser.add_argument("-compartment_id", dest="compartment_id", type=str, required=True, help="Compartment OCID for the Functions app and schedule.")
@@ -309,7 +312,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     container_cli = preflight(args)
-    config, home_region = initialize(args.auth, args.profile, args.config_file, args.region)
+    config, home_region = initialize(args.auth, args.profile, args.config_file, args.region, args.tenancy_id)
     configure_fn_context(args, config, home_region, container_cli)
     fn_dir = write_func_yaml(
         args.function_name,
