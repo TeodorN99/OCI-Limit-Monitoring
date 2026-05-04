@@ -232,7 +232,8 @@ def create_or_update_schedule(compartment_id, function_id, schedule_name, recurr
         schedule_client.list_schedules,
         compartment_id=compartment_id,
         display_name=schedule_name,
-    ).data.items
+    ).data
+    existing = collection_items(existing)
 
     if existing:
         schedule = existing[0]
@@ -265,6 +266,10 @@ def create_or_update_schedule(compartment_id, function_id, schedule_name, recurr
 
 def get_resource_id(resource):
     return getattr(resource, "id", None) or getattr(resource, "identifier", None)
+
+
+def collection_items(data):
+    return data.items if hasattr(data, "items") else data
 
 
 def ensure_scheduler_iam(tenancy_id, schedule_id, schedule_name):
