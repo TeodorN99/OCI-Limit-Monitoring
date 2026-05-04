@@ -263,6 +263,10 @@ def create_or_update_schedule(compartment_id, function_id, schedule_name, recurr
     ).data
 
 
+def get_resource_id(resource):
+    return getattr(resource, "id", None) or getattr(resource, "identifier", None)
+
+
 def ensure_scheduler_iam(tenancy_id, schedule_id, schedule_name):
     dynamic_group_name = safe_name("{}_scheduler_dg".format(schedule_name))
     policy_name = safe_name("{}_scheduler_policy".format(schedule_name))
@@ -375,12 +379,12 @@ if __name__ == "__main__":
     function = get_function(args.compartment_id, args.app_name, args.function_name)
     schedule = create_or_update_schedule(
         args.compartment_id,
-        function.identifier,
+        get_resource_id(function),
         args.schedule_name,
         args.recurrence_type,
         args.recurrence_details,
     )
     ensure_scheduler_iam(config["tenancy"], schedule.id, args.schedule_name)
 
-    print("[INFO] Function OCID: {}".format(function.identifier))
+    print("[INFO] Function OCID: {}".format(get_resource_id(function)))
     print("[INFO] Resource schedule OCID: {}".format(schedule.id))
