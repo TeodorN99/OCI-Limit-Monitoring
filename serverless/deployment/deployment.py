@@ -166,7 +166,7 @@ def get_function(compartment_id, app_name, function_name, attempts=12, delay_sec
     )
 
 
-def write_func_yaml(function_name, topic_id, percentage, regions, services, max_workers, timeout, memory):
+def write_func_yaml(function_name, topic_id, percentage, regions, services, limit_names, max_workers, timeout, memory):
     fn_config = """schema_version: 20180708
 name: {{ function_name }}
 version: 0.1.0
@@ -180,6 +180,7 @@ config:
   max_workers: "{{ max_workers }}"
 {% if regions %}  regions: {{ regions }}
 {% endif %}{% if services %}  services: {{ services }}
+{% endif %}{% if limit_names %}  limit_names: "{{ limit_names }}"
 {% endif %}"""
     message = Template(fn_config).render(
         function_name=function_name,
@@ -187,6 +188,7 @@ config:
         percentage=percentage,
         regions=regions,
         services=services,
+        limit_names=limit_names,
         max_workers=max_workers,
         timeout=timeout,
         memory=memory,
@@ -358,6 +360,7 @@ if __name__ == "__main__":
     parser.add_argument("-function_name", dest="function_name", default="limit-monitoring", help="Function name to deploy.")
     parser.add_argument("-regions", dest="regions", default="", help="Optional comma-separated region list. Empty means all subscribed regions.")
     parser.add_argument("-services", dest="services", default=DEFAULT_SERVICES, help="Comma-separated OCI service names to check. Use 'all' to scan every service.")
+    parser.add_argument("-limit_names", dest="limit_names", default="", help="Optional per-service limit allowlist. Format: service:limit1|limit2;service2:limit3")
     parser.add_argument("-max_workers", dest="max_workers", type=int, default=DEFAULT_MAX_WORKERS, help="Maximum concurrent GetResourceAvailability calls.")
     parser.add_argument("-schedule_name", dest="schedule_name", default="limit-monitoring-weekly", help="Resource Scheduler schedule name.")
     parser.add_argument("-recurrence_type", dest="recurrence_type", default="CRON", choices=["CRON", "ICAL"], help="Resource Scheduler recurrence type.")
@@ -380,6 +383,7 @@ if __name__ == "__main__":
         args.percentage,
         args.regions,
         args.services,
+        args.limit_names,
         args.max_workers,
         args.timeout,
         args.memory,

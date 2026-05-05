@@ -318,6 +318,37 @@ def normalize_services(value):
     return dedupe(services)
 
 
+def parse_limit_names(value):
+    if not value:
+        return {}
+
+    filters = {}
+    entries = [entry.strip() for entry in str(value).split(";") if entry.strip()]
+    for entry in entries:
+        if ":" in entry:
+            service, names = entry.split(":", 1)
+        elif "=" in entry:
+            service, names = entry.split("=", 1)
+        else:
+            logger.info("[WARN] Ignoring limit_names entry without service separator: {}".format(entry))
+            continue
+
+        service = service.strip().lower()
+        limit_names = [
+            name.strip()
+            for name in names.replace(",", "|").split("|")
+            if name.strip()
+        ]
+        if not service or not limit_names:
+            continue
+
+        filters.setdefault(service, set()).update(
+            name.lower() for name in limit_names
+        )
+
+    return filters
+
+
 def parse_max_workers(value):
     try:
         return max(1, int(value))
@@ -330,7 +361,25 @@ def supports_resource_availability(limit):
     return supported is not False
 
 
-def list_target_limit_definitions(tenancy, services):
+def filter_limit_names(limits, limit_names):
+    if not limit_names:
+        return limits
+
+    filtered_limits = []
+    for limit in limits:
+        service_names = limit_names.get(limit.service_name.lower())
+        if service_names is None or limit.name.lower() in service_names:
+            filtered_limits.append(limit)
+
+    logger.info(
+        "[INFO] Using {} of {} supported limit definitions after limit_names filtering.".format(
+            len(filtered_limits), len(limits)
+        )
+    )
+    return filtered_limits
+
+
+def list_target_limit_definitions(tenancy, services, limit_names):
     limits = []
     try:
         if services:
@@ -359,7 +408,7 @@ def list_target_limit_definitions(tenancy, services):
             len(supported_limits), len(limits)
         )
     )
-    return supported_limits
+    return filter_limit_names(supported_limits, limit_names)
 
 
 def availability_numbers(resource_availability):
@@ -423,10 +472,10 @@ def record_availability(limit_values, body_email, region, percentage, limit, ad,
         body_email.append(body)
 
 
-def check_limits(tenancy, topic_id, region, percentage, services, max_workers):
+def check_limits(tenancy, topic_id, region, percentage, services, limit_names, max_workers):
     limit_values = {}
     body_email = []
-    limits = list_target_limit_definitions(tenancy, services)
+    limits = list_target_limit_definitions(tenancy, services, limit_names)
     ads = []
 
     if any(limit.scope_type == "AD" for limit in limits):
@@ -475,7 +524,7 @@ def check_limits(tenancy, topic_id, region, percentage, services, max_workers):
     return limit_values
 
 
-def main(regions, topic_id, percentage, services, max_workers):
+def main(regions, topic_id, percentage, services, limit_names, max_workers):
     signer, limits_client, quotas_client, search_client, identity_client, notifications_client = initialize()
     tenancy = signer.tenancy_id
     region_data = identity_client.list_region_subscriptions(tenancy)
@@ -486,12 +535,12 @@ def main(regions, topic_id, percentage, services, max_workers):
             region=reg.region_name)
         if len(region_list) == 0:
             limit_values = check_limits(
-                tenancy, topic_id, reg.region_name, percentage, services, max_workers)
+                tenancy, topic_id, reg.region_name, percentage, services, limit_names, max_workers)
             limits.append(limit_values)
         else:
             if reg.region_name in region_list:
                 limit_values = check_limits(
-                    tenancy, topic_id, reg.region_name, percentage, services, max_workers)
+                    tenancy, topic_id, reg.region_name, percentage, services, limit_names, max_workers)
                 limits.append(limit_values)
     return limits
 
@@ -505,14 +554,23 @@ def handler(ctx, data: io.BytesIO = None):
     else:
         topic_id = config["topic_id"]
 
+    create_log()
+
     services = normalize_services(config.get("services", ""))
+    limit_names = parse_limit_names(config.get("limit_names", ""))
     max_workers = parse_max_workers(config.get("max_workers", DEFAULT_MAX_WORKERS))
 
-    create_log()
     logger.info("[INFO] Target services: {}".format(",".join(services) if services else "all"))
+    if limit_names:
+        logger.info("[INFO] Limit name filters: {}".format(
+            ";".join(
+                "{}:{}".format(service, ",".join(sorted(names)))
+                for service, names in sorted(limit_names.items())
+            )
+        ))
     logger.info("[INFO] Max workers: {}".format(max_workers))
 
-    limits = main(regions, topic_id, int(percentage), services, max_workers)
+    limits = main(regions, topic_id, int(percentage), services, limit_names, max_workers)
 
     return response.Response(
         ctx, response_data=json.dumps(limits),

@@ -333,6 +333,20 @@ Check only specific OCI services:
 -services 'compute,block-storage'
 ```
 
+Check only specific limit names for one or more services:
+
+```bash
+-limit_names 'compute:standard-e4-core-count|standard-e5-core-count;block-storage:total-storage-gb|volume-count'
+```
+
+`limit_names` is scoped per OCI Limits service name. If a service has a `limit_names` entry, only those limits are checked for that service. Selected services without a `limit_names` entry still scan all supported limits for that service.
+
+To check only a few Compute limits, combine both filters:
+
+```bash
+-services 'compute' -limit_names 'compute:standard-e4-core-count|standard-e5-core-count'
+```
+
 If `services` is omitted, the function uses this default allowlist:
 
 ```text
@@ -363,6 +377,7 @@ The deployment script writes [serverless/fn/func.yaml](./serverless/fn/func.yaml
 - `topic_id`: OCI Notifications topic OCID.
 - `regions`: Optional comma-separated region allowlist.
 - `services`: Comma-separated service allowlist. Empty uses the default allowlist; `all` scans every service.
+- `limit_names`: Optional per-service limit allowlist in `service:limit1|limit2;service2:limit3` format.
 - `max_workers`: Maximum concurrent resource availability calls. Default is `8`.
 
 ## Function Invocation Logs
