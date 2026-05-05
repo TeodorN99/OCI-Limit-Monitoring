@@ -122,6 +122,16 @@ python3 deployment.py \
 
 When `-password` is omitted, the script prompts for the OCIR auth token without echoing it.
 
+After deployment, remove any saved OCIR registry credentials from Cloud Shell if you do not want the container engine to keep them on disk:
+
+```bash
+docker logout cdg.ocir.io 2>/dev/null || true
+podman logout cdg.ocir.io 2>/dev/null || true
+unset OCIR_TOKEN
+```
+
+This removes the local Docker or Podman login for `cdg.ocir.io`.
+
 For example, the OCIR user format is:
 
 ```text
@@ -282,6 +292,16 @@ export OCIR_TOKEN
 ```
 
 The deployment script reads `OCIR_TOKEN` by default when `-password` is omitted. Use `-password_env NAME` to choose a different environment variable.
+
+After deployment, remove any saved OCIR registry credentials from Cloud Shell if you do not want the container engine to keep them on disk:
+
+```bash
+docker logout cdg.ocir.io 2>/dev/null || true
+podman logout cdg.ocir.io 2>/dev/null || true
+unset OCIR_TOKEN
+```
+
+This removes the local Docker or Podman login for `cdg.ocir.io`.
 
 If Cloud Shell is already authenticated to push to OCIR, omit `-user` and add:
 
