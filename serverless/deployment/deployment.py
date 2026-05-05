@@ -1,4 +1,5 @@
 import argparse
+import getpass
 import os
 import re
 import shutil
@@ -79,6 +80,19 @@ def preflight(args):
         "On Windows, one common option is: scoop install fnproject",
     )
     return get_container_cli(args.container_cli)
+
+
+def get_ocir_password(args):
+    if args.password:
+        print("[WARN] Passing -password exposes the token in the deployment.py process arguments. Prefer omitting it and using the hidden prompt.")
+        return args.password
+
+    if args.password_env:
+        password = os.environ.get(args.password_env, "")
+        if password:
+            return password
+
+    return getpass.getpass("OCIR auth token: ")
 
 
 def get_oci_auth(auth, profile_name, config_file, region, tenancy_id):
@@ -224,12 +238,16 @@ def configure_fn_context(args, config, home_region, container_cli):
         print("[INFO] Skipping docker login. Make sure the current environment can push to OCIR.")
         return
 
-    if not args.user or not args.password:
-        raise RuntimeError("Provide -user and -password, or use -skip_docker_login if OCIR is already authenticated.")
+    if not args.user:
+        raise RuntimeError("Provide -user, or use -skip_docker_login if OCIR is already authenticated.")
+
+    password = get_ocir_password(args)
+    if not password:
+        raise RuntimeError("Provide an OCIR auth token with the hidden prompt, -password_env, or -password.")
 
     run(
         [container_cli, "login", "-u", args.user, "--password-stdin", "{}.ocir.io".format(str(home_region.region_key).lower())],
-        stdin=args.password,
+        stdin=password,
     )
 
 
@@ -351,7 +369,8 @@ if __name__ == "__main__":
     parser.add_argument("-region", dest="region", default=os.environ.get("OCI_REGION") or os.environ.get("OCI_CLI_REGION") or "", help="Region used to bootstrap cloud_shell or instance_principal auth.")
     parser.add_argument("-tenancy_id", dest="tenancy_id", default="", help="Tenancy OCID. Required for cloud_shell and instance_principal auth.")
     parser.add_argument("-user", dest="user", type=str, default="", help="OCIR user. Usually tenancy_namespace/user_email.")
-    parser.add_argument("-password", dest="password", type=str, default="", help="OCIR auth token.")
+    parser.add_argument("-password", dest="password", type=str, default="", help="OCIR auth token. Prefer omitting this and using the hidden prompt.")
+    parser.add_argument("-password_env", dest="password_env", default="OCIR_TOKEN", help="Environment variable containing the OCIR auth token. Used if -password is omitted.")
     parser.add_argument("-compartment_id", dest="compartment_id", type=str, required=True, help="Compartment OCID for the Functions app and schedule.")
     parser.add_argument("-image_compartment_id", dest="image_compartment_id", default="", help="Compartment OCID for OCIR function images. Defaults to -compartment_id.")
     parser.add_argument("-app_name", dest="app_name", type=str, required=True, help="Functions application name.")

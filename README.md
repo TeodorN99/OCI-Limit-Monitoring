@@ -100,12 +100,6 @@ terraform output function_invocation_logs
 
 Confirm the OCI Notifications email subscription before expecting alert emails.
 
-Read your OCIR auth token without writing it to shell history:
-
-```bash
-read -s OCIR_TOKEN
-```
-
 Deploy the function image and Resource Scheduler schedule:
 
 ```bash
@@ -118,7 +112,6 @@ python3 deployment.py \
   -fn_provider oracle-cs \
   -container_cli auto \
   -user '<tenancy_namespace>/<user_email>' \
-  -password "$OCIR_TOKEN" \
   -compartment_id '<project_compartment_id>' \
   -app_name 'limit-monitoring-app' \
   -topic_id '<topic_ocid>' \
@@ -126,6 +119,8 @@ python3 deployment.py \
   -services 'compute,block-storage,vcn,load-balancer,database' \
   -max_workers 8
 ```
+
+When `-password` is omitted, the script prompts for the OCIR auth token without echoing it.
 
 For example, the OCIR user format is:
 
@@ -269,7 +264,6 @@ python3 deployment.py \
   -fn_provider oracle-cs \
   -container_cli auto \
   -user '<tenancy_namespace>/<user_email>' \
-  -password '<ocir_auth_token>' \
   -compartment_id '<project_compartment_id>' \
   -app_name 'limit-monitoring-app' \
   -topic_id '<topic_ocid>' \
@@ -278,9 +272,18 @@ python3 deployment.py \
   -max_workers 8
 ```
 
-Oracle's Cloud Shell Functions quickstart still tells you to generate an auth token and log in to OCIR before deploying. So in most tenancies, you should expect to provide `-user` and `-password` even from Cloud Shell.
+Oracle's Cloud Shell Functions quickstart still tells you to generate an auth token and log in to OCIR before deploying. So in most tenancies, you should expect to provide `-user` and enter the OCIR auth token at the hidden prompt even from Cloud Shell.
 
-If Cloud Shell is already authenticated to push to OCIR, omit `-user` and `-password` and add:
+For non-interactive use, set the token in an environment variable and keep `-password` off the command line:
+
+```bash
+read -s OCIR_TOKEN
+export OCIR_TOKEN
+```
+
+The deployment script reads `OCIR_TOKEN` by default when `-password` is omitted. Use `-password_env NAME` to choose a different environment variable.
+
+If Cloud Shell is already authenticated to push to OCIR, omit `-user` and add:
 
 ```bash
 -skip_docker_login
@@ -296,7 +299,6 @@ python deployment.py \
   -config_file 'C:/Users/Sofiane Mahdjoubi/.oci/config' \
   -fn_provider oracle \
   -user '<tenancy_namespace>/<user_email>' \
-  -password '<ocir_auth_token>' \
   -compartment_id '<project_compartment_id>' \
   -app_name 'limit-monitoring-app' \
   -topic_id '<topic_ocid>' \
