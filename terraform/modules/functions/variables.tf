@@ -14,6 +14,16 @@ variable "app_params" {
     subnet_name      = list(string)
     display_name     = string
     config           = map(string)
-    freeform_tags    = map(string)    
+    freeform_tags    = map(string)
   }))
+}
+
+variable "enable_invocation_logs" {
+  type    = bool
+  default = true
+}
+
+variable "invocation_log_retention_duration" {
+  type    = number
+  default = 30
 }

@@ -1,3 +1,3 @@
-fdk
-oci
-backoff
+fdk==0.1.109
+oci==2.171.0
+backoff==2.2.1

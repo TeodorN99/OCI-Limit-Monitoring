@@ -1,347 +1,424 @@
-# Limit Monitoring
+# OCI Limit Monitoring
 
-This code, wrapped in an Oracle function, will verify the limits for all of the available OCI components. 
-If the total available resources is less than a percentage, the code will publish a message to a notification.
+This project deploys one OCI Function in the tenancy home region. The function checks service limits across all subscribed OCI regions and publishes a notification when available capacity drops below the configured threshold.
+
+Scheduling is handled by OCI Resource Scheduler. The old Object Storage bucket, lifecycle policy, delete event, main function, and per-region worker functions have been removed.
+
+## Architecture
+
+```text
+OCI Resource Scheduler
+  -> invokes one OCI Function in detached mode
+  -> function loops over subscribed regions
+  -> function checks OCI service limits and availability
+  -> function publishes alerts to OCI Notifications
+```
+
+The function runs in the home region, but creates regional OCI SDK clients while it checks each subscribed region.
+
+## What Terraform Creates
+
+- Optional project compartment.
+- Private VCN, private regional subnet, service gateway, NAT gateway, route table, and security list for OCI Functions.
+- OCI Functions application in the tenancy home region.
+- OCI Logging log group and Function Invocation Logs for the Functions application.
+- OCI Notifications topic and subscription.
+- Dynamic group and policy for the function resource principal.
+
+Terraform does not deploy the function image. The deployment script uses the Fn CLI for that, then creates or updates the OCI Resource Scheduler schedule once the function OCID exists.
+
+## Current Dependency Pins
+
+- Terraform OCI provider: `oracle/oci >= 8.12.0, < 9.0.0`
+- Function Python dependencies:
+  - `fdk==0.1.109`
+  - `oci==2.171.0`
+  - `backoff==2.2.1`
+- Deployment script dependencies:
+  - `oci==2.171.0`
+  - `Jinja2==3.1.6`
 
 ## Prerequisites
-- Comparment
-- Network (VCN / Subnet / IG / NAT)
-- Oracle FN
-- Docker
-- A policy that let's the object storage service manage buckets should look like:
-`Allow service objectstorage-us-ashburn-1 to manage object-family in Tenancy`
 
-### Step1 - Install fn project
-Before installing fn project, make sure you have docker up an running.
+- OCI Cloud Shell is recommended. It already includes Terraform, OCI CLI, Fn CLI, and a container engine.
+- IAM permissions to manage compartments, Functions, Notifications, dynamic groups, policies, and Resource Scheduler schedules.
+- An OCIR auth token for container registry login.
 
-Go to you terminal.
+For local deployment instead of Cloud Shell, you also need Terraform `>= 1.3.0`, Docker or Podman, Fn CLI, and an OCI SDK config profile.
 
-- MacOS: `brew update && brew install fn`
-- Linux / MacOS: `curl -LSs https://raw.githubusercontent.com/fnproject/cli/master/install | sh`
+## Recommended Cloud Shell Deployment
 
-You can check more info [here](https://fnproject.io/tutorials/install/)
+Clone the branch:
 
-
-### Step2 - Creating an Auth Token
-You will need to create an auth token.
-
-In order to do so, you will have to go to your IAM user, select Auth Tokens and Generate Auth Tokens like below:
-![](./images/auth_token.png)
-
-The auth token will shop up only once, so make sure you save it. This token will be the password used for logging it to the docker registry.
-
-
-### Step 3 - Running the terraform code
-The terraform code is used to prepare the scheduling part of the function and it is deploying:
-- One Object Storage Bucket
-- One Bucket LifeCycle Policy
-- One Notification Topic (The fn will publish messages to this topic, if the limits are lower than the threshold)
-- One Notification Subscription
-
-The Object Storage Bucket has a lifecycle policy that deletes all objects after 7 days. Based on this policy, an event will trigger the function. 
-
-For the first time, you will have to run the function manually or delete an object inside of this bucket. The function at the end of a run, will create an object inside the bucket and based on the delete policy mentioned above, it will run weekly.
-
-Before diving into the code you will need to solve some dependencies:
-
-### Installing Terraform
-
-Go to [terraform.io](https://www.terraform.io/downloads.html) and download the proper package for your operating system and architecture. Terraform is distributed as a single binary. 
-Install Terraform by unzipping it and moving it to a directory included in your system's PATH. You will need the latest version available.
-
-### How to populate provider.auto.tfvars.
-
-In order to prepare **provider.auto.tfvars** file, you will need the following:
-- Tenancy OCID
-- User OCID
-- Local Path to your private oci api key
-- Fingerprint of your public oci api key
-- Region
-
-#### Getting the Tenancy and User OCIDs
-
-You will have to login to the [console](https://console.us-ashburn-1.oraclecloud.com) using your credentials (tenancy name, user name and password). If you do not know those, you will have to contact a tenancy administrator.
-
-In order to obtain the tenancy ocid, after logging in, from the menu, select Administration -> Tenancy Details. The tenancy OCID, will be found under Tenancy information and it will be similar to **ocid1...."
-
-In order to get the user ocid, after logging in, from the menu, select Identity -> Users. Find your user and click on it (you will need to have this page open for uploading the oci\_api\_public\_key). From this page, you can get the user OCID which will be similar to **ocid1...."
-
-
-
-#### Creating the OCI API Key Pair and Upload it to your user page
-
-Create an oci\_api\_key pair in order to authenticate to oci as specified in the [documentation](https://docs.cloud.oracle.com/en-us/iaas/Content/API/Concepts/apisigningkey.htm#How):
-
-Create the .oci directory in the home of the current user
-
-`$ mkdir ~/.oci`
-
-Generate the oci api private key
-
-`$ openssl genrsa -out ~/.oci/oci_api_key.pem 2048`
-
-Make sure only the current user can access this key
-
-`$ chmod go-rwx ~/.oci/oci_api_key.pem`
-
-Generate the oci api public key from the private key
-
-`$ openssl rsa -pubout -in ~/.oci/oci_api_key.pem -out ~/.oci/oci_api_key_public.pem`
-
-You will have to upload the public key to the oci console for your user (go to your user page -> API Keys -> Add Public Key and paste the contents in there) in order to be able to do make API calls.
-
-After uploading the public key, you can see its fingerprint into the console. You will need that fingerprint for your provider.auto.tfvars file. 
-You can also get the fingerprint from running the following command on your local workstation by using your newly generated oci api private key.
-
-`$ openssl rsa -pubout -outform DER -in ~/.oci/oci_api_key.pem | openssl md5 -c`
-
-
-#### Getting the Region
-
-Even though, you may know your region name, you will needs its identifier for the provider.auto.tfvars file (for example, US East Ashburn has us-ashburn-1 as its identifier).
-
-In order to obtain your region identifier, you will need to Navigate in the OCI Console to Administration -> Region Management
-
-Select the region you are interested in, and save the region identifier.
-
-
-#### Prepare the provider.auto.tfvars file
-
-You will have to modify the **provider.auto.tfvars** file to reflect the values that you’ve captured. 
-The **provider_oci** map will have the following keys:
-- **tenancy** (add your tenancy_id as the value)
-- **user\_id** (add your user\_id as the value)
-- **fingerprint** (add the fingerprint of the public **oci\_api\_key\_public.pem** you've generated and uploaded in the console to your user)
-- **key\_file\_path** (add the local path to your private **oci\_api\_key.pem** key)
-- **region** (add the region identifier)
-
-In the end, your **provider.auto.tfvars** should look like this:
+```bash
+git clone -b modernize-resource-scheduler <your-repo-url>
+cd OCI-Limit-Monitoring
 ```
+
+Install the Python deployment dependencies:
+
+```bash
+python3 -m pip install -r serverless/deployment/requirements.txt --user
+```
+
+Create and edit your local Terraform variables file:
+
+```bash
+cp terraform/sofiane.tfvars.example terraform/sofiane.tfvars
+vi terraform/sofiane.tfvars
+```
+
+In Cloud Shell, use Cloud Shell auth in `terraform/sofiane.tfvars`:
+
+```hcl
 provider_oci = {
-  tenancy       = "ocid1...."
-  user_id       = "ocid1...."
-  fingerprint   = "45:87:.."
-  key_file_path = "/root/.oci/oci_api_key.pem"
-  region        = "us-ashburn-1"
+  tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+  region              = "eu-paris-1"
+  config_file_path    = ""
+  config_file_profile = ""
+  auth                = "InstancePrincipal"
 }
 ```
 
-#### Dependencies:
+Deploy the Terraform resources:
 
-Apart from the **provider.auto.tfvars**, there may be some other dependencies in the **terraform.tfvars** file that you will have to address:
-- Compartment dependency
-    - In order to be able to run the sample code, you will have to prepare a map variable (like in the **terraform.tfvars** file) called **compartment_ids**, which will hold key/value pairs with the names and ids of the compartments that you want to use.This variable will be external in order to offer multiple ways of linking them from a terraform perspective.
-    ```
-    compartment_ids = {
-      sandbox = "ocid1...."
-    }
-    ```
-
-- Application dependency
-    - The application will need a subnet to reside in. You will need to prepare the map variable **subnet_ids** with the name and the subnet OCID of your choosing, and specify that name inside the variable **app_params** under **subnet_name**:
-
-    ```
-    subnet_ids = {
-      hur1pub  = "ocid1.subnet.oc1.iad.aaa"
-    }
-    ```
-
-    ```
-    app_params = {
-      thunder_app = {
-        compartment_name = "sandbox"
-        subnet_name      = ["hur1pub"]
-        display_name     = "thunder_app"
-        config = {
-          "MY_FUNCTION_CONFIG" : "ConfVal"
-        }
-        freeform_tags = {
-        }
-      }
-    }
-    ```
-- Subscription dependency
-    - endpoint - Add the email that will receive limits notifications from the function
-    ```
-    subscription1 = {
-      comp_name  = "sandbox"
-      endpoint   = "test.test@oracle.com"
-      protocol   = "EMAIL"
-      topic_name = "topic1"
-    }
-    ```
-
-
-#### Terraform parameters explained:
-
-- Application parameters
-    - compartment_name  - The compartment name in which the Event will be created
-    - subnet_name       - Name of the subnet or subnets in which to run functions in the application
-    - display_name      - Name of the application
-    - config            - Values that are passed on to the function as environment variable.
-
-- Bucket parameters
-    - compartment_name  - The compartment name in which the Bucket will be created
-    - name              - The name of the Bucket
-    - access_type       - The type of public access on this Bucket
-    - storage_tier      - The type of storage tier on this Bucket
-    - events_enabled    - Whether or not events are emitted for object state changes in this bucket
-    - kms_key_name      - The name of the KMS master key that will be used for encrypting the bucket. Empty string "" means that the KMS will not be used and the bucket will be encrypted using Oracle-managed keys
-
-- Object lifecycle policy parameters
-    - bucket_name - The name of the bucket to which the lifecycle policy will be applied
-    - rule_name   - The name of the policy
-    - is_enabled  - Whether or not the policy is enabled
-    - action      - The type of action for this policy
-    - time_amount - Specifies the age of objects to apply the rule to. This is interpreted in units defined by the time_unit parameter
-    - time_unit   - The unit that should be used to interpret time_amount parameter
-
-- Topic parameters
-    - comp_name   - The compartment name in which the Topic will be created
-    - topic_name  - The name of the Topic
-    - description - The description of the Topic
-
-- Subscription parameters
-    - comp_name - The compartment name in which the Subscription will be created
-    - endpoint  - A locator that corresponds to the subscription protocol
-    - protocol  - The protocol used for the subscription
-    - topic_name - The name of the Topic the subscription is applied to
-
-
-
-Run the terraform code
-
-Go to the terraform directory.
-```
-$ terraform init
-$ terraform plan
-$ terraform apply
+```bash
+cd terraform
+terraform init -upgrade
+terraform plan -var-file sofiane.tfvars -out tfplan
+terraform apply tfplan
 ```
 
-You will need to save the topic_id, app_name and bucket_name exported as outputs from terraform, because you will need those in the next step.
+Save the Terraform outputs:
 
-
-
-
-## Automatic deployment (one function per region with a main function that runs all)
-### Step4 - Run the deployment.py automation
-Go to serverless -> deployment.
-
-The **deployment.py** utility will deploy one function per region (only the subscribed regions will be in effect), a main function that will run all the other functions and an event that will trigger the main function.
-
-All of the functions and the event will be actually deployed in the home region and from there, limits will be checked for all the subscribed regions.
-
-The script has a couple of args that you will have to provide.
-
-```
-$ python3.9 deployment.py --help
-usage: deployment.py [-h] -user USER -password PASSWORD -compartment_id COMPARTMENT_ID -app_name APP_NAME -topic_id TOPIC_ID -percentage PERCENTAGE -bucket_name BUCKET_NAME -fn_prefix FN_PREFIX
-
-Creates the limits functions for all of the regions
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -user USER            The user used for connecting to the docker registry. tenancy_namespace\user_email or tenancy_namespace\federation_client\user_email
-  -password PASSWORD    The auth token value used for logging in to the docker registry
-  -compartment_id COMPARTMENT_ID
-                        The comp id in which the functions will be created
-  -app_name APP_NAME    The name of the app in which the functions will be created
-  -topic_id TOPIC_ID    The id of the topic used for publishing limit messages
-  -percentage PERCENTAGE
-                        The threshold percentage
-  -bucket_name BUCKET_NAME
-                        The name of the bucket used by the main function
-  -fn_prefix FN_PREFIX
-                        The prefix you want to use for your function names
+```bash
+terraform output project_compartment_id
+terraform output topic
+terraform output apps
+terraform output function_invocation_logs
 ```
 
-The **user** and **password** args are used for connecting to the docker registry. 
+Confirm the OCI Notifications email subscription before expecting alert emails.
 
-The **user** should be preceeded by the tenancy_namespace and if your user is federated, it should also have the federation client in the name.
+Deploy the function image and Resource Scheduler schedule:
 
-For a tenancy having the namespace myawesometenancy, using oracle identity cloud service, for a user called myawesomeuser the user will be:
+```bash
+cd ../serverless/deployment
 
-`myawesometenancy\oracleidentitycloudservice\myawesomeuser`
-
-The **password** is the auth token created at Step3. Put it in ''.
-
-**compartment_id** will be the id of the compartment in which the functions will be created.
-
-**app_name** is the name of the application in which the functions will be created
-
-**topic_id** is the id of the topic used for publishing the limits
-
-**percentage** the threshold of the limit checks
-
-**bucket_name** the name of the bucket used for scheduling the functions.
-
-**fn_prefix** the prefix of the functions
-
-
-Example run:
-```
-python3.9 deployment.py -user  myawesometenancy\oracleidentitycloudservice\myawesomeuser -password '' -compartment_id ocid1.compartment.oc1.. -app_name test2 -topic_id ocid1.onstopic.oc1.iad. -percentage 90 -bucket_name name_of_the_bucket -fn_prefix name_prefix_of_functions
+python3 deployment.py \
+  -tenancy_id '<tenancy_ocid>' \
+  -auth cloud_shell \
+  -region eu-paris-1 \
+  -fn_provider oracle-cs \
+  -container_cli auto \
+  -user '<tenancy_namespace>/<user_email>' \
+  -compartment_id '<project_compartment_id>' \
+  -app_name 'limit-monitoring-app' \
+  -topic_id '<topic_ocid>' \
+  -percentage 90 \
+  -services 'compute,block-storage,vcn,load-balancer,database' \
+  -max_workers 8
 ```
 
-After this finishes, you will have everything up and running.
+When `-password` is omitted, the script prompts for the OCIR auth token without echoing it.
 
+After deployment, remove any saved OCIR registry credentials from Cloud Shell if you do not want the container engine to keep them on disk:
 
-## Manual deployment of the function
-### Step5 - Prepare the context
-After you make sure you have fn project installed, you are now ready to deploy your function.
+```bash
+docker logout cdg.ocir.io 2>/dev/null || true
+podman logout cdg.ocir.io 2>/dev/null || true
+unset OCIR_TOKEN
+```
 
-In order to do so, you must first prepare the context. In your terminal run:
+This removes the local Docker or Podman login for `cdg.ocir.io`.
 
-`fn create context context_name --provider oracle` - The name can be anything of your choosing
+For example, the OCIR user format is:
 
-`fn use context context_name`
+```text
+<tenancy_namespace>/<user_email>
+```
 
-`fn update context oracle.compartment-id your_compartment_id` - The compartment id, should be the compartment in which you've created the FN Application.
+Run a manual test:
 
-`fn update context api-url https://functions.region.oci.oraclecloud.com` - For ashburn, the api-url will be: `https://functions.us-ashburn-1.oci.oraclecloud.com`
+```bash
+fn invoke limit-monitoring-app limit-monitoring
+```
 
-`fn update context registry region_identifier.ocir.io/tenancy_namespace/name_of_your_registry` - For a tenancy named abcd in the ashburn region for a registry named my_registry (this can be anything) this will translate to: `iad.ocir.io/abcd/my_registry`
+Query recent invocation logs after a test run:
 
+```bash
+oci logging-search search-logs \
+  --search-query "search '<project_compartment_id>/<function_invocation_log_ocid>' | sort by datetime desc" \
+  --time-start "$(date -u -d '-30 minutes' +%Y-%m-%dT%H:%M:%SZ)" \
+  --time-end "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
 
-### Step6 - Docker Registry Login
-In order to login to the ashburn docker registry, you will have to run the following command, in your terminal:
+## Configure Terraform
 
-`docker login iad.ocir.io`
+This section is useful for local deployments or for adjusting the Terraform variables beyond the Cloud Shell quick path.
 
-When prompted for your user, make sure you also add the tenancy namespace before the user name.
-E.G. If your user is test@test.com and the tenancy namespace is abcd your user will be: `abcd/test@test.com`.
+Create your local variables file from the example, then edit it:
 
-When prompted for your password, use the auth token generated above.
+```bash
+cp terraform/sofiane.tfvars.example terraform/sofiane.tfvars
+```
 
-You should now receive a message that you are successfully loged in to the registry.
+Edit `terraform/sofiane.tfvars`:
 
+```hcl
+provider_oci = {
+  tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+  region              = "eu-amsterdam-1"
+  config_file_profile = "SOFIANE"
+  auth                = "ApiKey"
+}
 
-### Step7 - Deploying the function
-After completing all the steps from above, you are now ready to deploy the function.
-In order to do that, you must first make sure that you are in the **main** directory.
+create_network            = true
+enable_private_nat_egress = true
+network = {
+  vcn_name                   = "limit-monitoring-vcn"
+  vcn_cidr                   = "10.42.0.0/16"
+  vcn_dns_label              = "limitmon"
+  functions_subnet_name      = "functions-private-subnet"
+  functions_subnet_cidr      = "10.42.1.0/24"
+  functions_subnet_dns_label = "fnprivate"
+}
 
-You can do so, by running the following command in your terminal: `fn deploy --app name_of_the_app` - The app name will be the one created in terraform
+subscription_params = {
+  email = {
+    comp_name  = "limit_monitoring"
+    endpoint   = "replace-with-your-email@example.com"
+    protocol   = "EMAIL"
+    topic_name = "limit-monitoring-topic"
+  }
+}
+```
 
+By default, this creates a compartment named `oci-limit-monitoring`. To reuse an existing compartment, set:
 
-### Step8 - Configuration variables
-Each function has 3 configuration variables:
-- regions - The region in which the function will run
-- percentage - Should be a number between 1-100. Based on this number, you will receive alerts for your functions
-- topic_id - The notification topic id that you will use in order to publish messages
+```hcl
+create_project_compartment = false
 
-If you want a different treshold for a region, you can change the percentage for the function from that region.
-In order to do so, go to applications -> select the created app from step3 -> select the function for the region that you want(the name should be the fn_prefix_region_key, example **prefix_phx**) -> go to configuration and click on the edit button next to percentage.
+compartment_ids = {
+  limit_monitoring = "ocid1.compartment.oc1..existing-compartment-ocid"
+}
+```
 
-![](./images/configuration.png)
+By default, Terraform also creates a private VCN for Functions. It does not create a public subnet or internet gateway. The private subnet routes same-region Oracle service traffic through a service gateway to `All <region> Services In Oracle Services Network`.
 
-### Step9 - Invoking the function
-Go back to your terminal in the function directory.
+Because the function can check every subscribed OCI region from one home-region function, Terraform also creates a NAT gateway by default. This keeps the subnet private while allowing outbound HTTPS to cross-region OCI API endpoints such as `limits.eu-frankfurt-1.oci.oraclecloud.com`.
 
-By running `fn -v invoke app_name function_name`, you will be able to invoke the function.
+If you only check the function home region and do not need outbound public HTTPS, you can disable NAT creation:
 
-The `app_name` is the name of the app created with terraform 
+```hcl
+enable_private_nat_egress = false
+```
 
-The `function_name` is the main function deployed in step4.
+To reuse an existing private subnet instead, set:
 
-After 30 seconds to 2 minutes, the function should've ran completelly. 
-If the limits have been reached in any regions, you should be notified via the subscriptions you've created with the terraform code.
+```hcl
+create_network = false
+
+subnet_ids = {
+  functions = "ocid1.subnet.oc1..existing-private-subnet-ocid"
+}
+```
+
+Apply Terraform:
+
+```bash
+cd terraform
+terraform init -upgrade
+terraform plan -var-file sofiane.tfvars -out tfplan
+terraform apply tfplan
+```
+
+In OCI Cloud Shell, use instance principal auth instead of a local OCI config file:
+
+```hcl
+provider_oci = {
+  tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+  region              = "eu-frankfurt-1"
+  config_file_path    = ""
+  config_file_profile = ""
+  auth                = "InstancePrincipal"
+}
+```
+
+Save these outputs:
+
+- `project_compartment_id`
+- `apps["limit-monitoring-app"]`
+- `topic["limit-monitoring-topic"]`
+- `function_invocation_logs["limit-monitoring-app"]`
+
+## Deploy the Function and Schedule
+
+Install deployment dependencies:
+
+```bash
+python -m pip install -r serverless/deployment/requirements.txt
+```
+
+Deploy the single all-regions function and create/update the Resource Scheduler schedule.
+
+From OCI Cloud Shell, use the Cloud Shell Fn provider. Cloud Shell has the Fn CLI installed, and typically has `podman` available for image builds:
+
+```bash
+cd serverless/deployment
+python3 deployment.py \
+  -auth cloud_shell \
+  -region eu-frankfurt-1 \
+  -tenancy_id '<tenancy_ocid>' \
+  -profile DEFAULT \
+  -fn_provider oracle-cs \
+  -container_cli auto \
+  -user '<tenancy_namespace>/<user_email>' \
+  -compartment_id '<project_compartment_id>' \
+  -app_name 'limit-monitoring-app' \
+  -topic_id '<topic_ocid>' \
+  -percentage 90 \
+  -services 'compute,block-storage,vcn,load-balancer,database' \
+  -max_workers 8
+```
+
+Oracle's Cloud Shell Functions quickstart still tells you to generate an auth token and log in to OCIR before deploying. So in most tenancies, you should expect to provide `-user` and enter the OCIR auth token at the hidden prompt even from Cloud Shell.
+
+For non-interactive use, set the token in an environment variable and keep `-password` off the command line:
+
+```bash
+read -s OCIR_TOKEN
+export OCIR_TOKEN
+```
+
+The deployment script reads `OCIR_TOKEN` by default when `-password` is omitted. Use `-password_env NAME` to choose a different environment variable.
+
+After deployment, remove any saved OCIR registry credentials from Cloud Shell if you do not want the container engine to keep them on disk:
+
+```bash
+docker logout cdg.ocir.io 2>/dev/null || true
+podman logout cdg.ocir.io 2>/dev/null || true
+unset OCIR_TOKEN
+```
+
+This removes the local Docker or Podman login for `cdg.ocir.io`.
+
+If Cloud Shell is already authenticated to push to OCIR, omit `-user` and add:
+
+```bash
+-skip_docker_login
+```
+
+From a local machine, use the local Fn provider:
+
+```bash
+cd serverless/deployment
+python deployment.py \
+  -auth api_key \
+  -profile SOFIANELS \
+  -config_file 'C:/Users/Sofiane Mahdjoubi/.oci/config' \
+  -fn_provider oracle \
+  -user '<tenancy_namespace>/<user_email>' \
+  -compartment_id '<project_compartment_id>' \
+  -app_name 'limit-monitoring-app' \
+  -topic_id '<topic_ocid>' \
+  -percentage 90 \
+  -services 'compute,block-storage,vcn,load-balancer,database' \
+  -max_workers 8
+```
+
+The default schedule is every Monday at `07:00 UTC`:
+
+```text
+0 7 * * 1
+```
+
+Override it with:
+
+```bash
+-recurrence_type CRON -recurrence_details '0 7 * * 1'
+```
+
+OCI Resource Scheduler uses UTC. The schedule invokes the function with the `START_RESOURCE` action, which is how scheduled OCI Functions are started.
+
+## Optional Filters
+
+Check only specific regions:
+
+```bash
+-regions 'eu-amsterdam-1,us-ashburn-1'
+```
+
+Check only specific OCI services:
+
+```bash
+-services 'compute,block-storage'
+```
+
+Check only specific limit names for one or more services:
+
+```bash
+-limit_names 'compute:standard-e4-core-count|standard-e5-core-count;block-storage:total-storage-gb|volume-count'
+```
+
+`limit_names` is scoped per OCI Limits service name. If a service has a `limit_names` entry, only those limits are checked for that service. Selected services without a `limit_names` entry still scan all supported limits for that service.
+
+To check only a few Compute limits, combine both filters:
+
+```bash
+-services 'compute' -limit_names 'compute:standard-e4-core-count|standard-e5-core-count'
+```
+
+If `services` is omitted, the function uses this default allowlist:
+
+```text
+compute,block-storage,vcn,load-balancer,database
+```
+
+Use the OCI Limits programmatic service names exactly as returned by `oci limits service list`.
+
+To scan every service, use:
+
+```bash
+-services 'all'
+```
+
+Control the number of concurrent `GetResourceAvailability` calls:
+
+```bash
+-max_workers 8
+```
+
+If `regions` is omitted, all subscribed regions are checked.
+
+## Function Configuration
+
+The deployment script writes [serverless/fn/func.yaml](./serverless/fn/func.yaml) before deploying. The important config values are:
+
+- `percentage`: Alert threshold.
+- `topic_id`: OCI Notifications topic OCID.
+- `regions`: Optional comma-separated region allowlist.
+- `services`: Comma-separated service allowlist. Empty uses the default allowlist; `all` scans every service.
+- `limit_names`: Optional per-service limit allowlist in `service:limit1|limit2;service2:limit3` format.
+- `max_workers`: Maximum concurrent resource availability calls. Default is `8`.
+
+## Function Invocation Logs
+
+Terraform enables OCI Logging for the Functions application by default. It creates:
+
+- A log group named `<application-name>-logs`.
+- A service log named `<application-name>_invoke`.
+- 30-day retention by default.
+
+Override the defaults in your Terraform variables file if needed:
+
+```hcl
+enable_function_invocation_logs              = true
+function_invocation_log_retention_duration   = 30
+```
+
+## Notes
+
+- Email subscriptions must be confirmed before alerts are delivered.
+- Resource Scheduler requires a dynamic group containing the schedule resource and a policy allowing that dynamic group to manage Functions. The deployment script creates or updates those resources after the schedule exists.
+- The function resource principal policy is created by Terraform and allows the function to inspect limits/resource availability and publish to Notifications.
