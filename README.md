@@ -120,6 +120,12 @@ python3 deployment.py \
   -max_workers 8
 ```
 
+To customize when the function runs, add `-recurrence_type` and `-recurrence_details` to the deployment command. For example, daily at `07:00 UTC`:
+
+```bash
+-recurrence_type CRON -recurrence_details '0 7 * * *'
+```
+
 When `-password` is omitted, the script prompts for the OCIR auth token without echoing it.
 
 After deployment, remove any saved OCIR registry credentials from Cloud Shell if you do not want the container engine to keep them on disk:
@@ -280,6 +286,12 @@ python3 deployment.py \
   -percentage 90 \
   -services 'compute,block-storage,vcn,load-balancer,database' \
   -max_workers 8
+```
+
+To customize when the function runs, add `-recurrence_type` and `-recurrence_details` to the deployment command. For example, daily at `07:00 UTC`:
+
+```bash
+-recurrence_type CRON -recurrence_details '0 7 * * *'
 ```
 
 Oracle's Cloud Shell Functions quickstart still tells you to generate an auth token and log in to OCIR before deploying. So in most tenancies, you should expect to provide `-user` and enter the OCIR auth token at the hidden prompt even from Cloud Shell.
