@@ -14,6 +14,15 @@ provider_oci = {
 #   config_file_profile = ""
 #   auth                = "InstancePrincipal"
 # }
+#
+# For Oracle EU Sovereign Cloud, use an OC19 tenancy and OC19 region:
+# provider_oci = {
+#   tenancy             = "ocid1.tenancy.oc19..replace-with-your-tenancy-ocid"
+#   region              = "eu-frankfurt-2"
+#   config_file_path    = "~/.oci/config"
+#   config_file_profile = "DEFAULT"
+#   auth                = "ApiKey"
+# }
 
 create_project_compartment      = true
 project_compartment_key         = "limit_monitoring"

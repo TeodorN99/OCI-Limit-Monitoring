@@ -23,6 +23,34 @@ DEFAULT_SERVICES = "compute,block-storage,vcn,load-balancer,database"
 DEFAULT_MAX_WORKERS = 8
 
 
+def regional_endpoint(region_name, endpoint_template):
+    return oci.regions.endpoint_for(
+        "custom",
+        region_name,
+        service_endpoint_template=endpoint_template,
+    ).rstrip("/")
+
+
+def endpoint_host(endpoint):
+    return re.sub(r"^https?://", "", endpoint).rstrip("/")
+
+
+def functions_endpoint(region_name):
+    return regional_endpoint(
+        region_name,
+        "https://functions.{region}.oci.{secondLevelDomain}",
+    )
+
+
+def ocir_registry_host(region_name):
+    return endpoint_host(
+        regional_endpoint(
+            region_name,
+            "https://ocir.{region}.oci.{secondLevelDomain}",
+        )
+    )
+
+
 def safe_name(value):
     return re.sub(r"[^A-Za-z0-9_]", "_", value)[:100]
 
@@ -215,6 +243,9 @@ config:
 def configure_fn_context(args, config, home_region, container_cli):
     namespace = os_client.get_namespace().data
     context_name = args.fn_context
+    registry_host = ocir_registry_host(home_region.region_name)
+    registry_path = "{}/{}/limits".format(registry_host, namespace)
+    api_url = functions_endpoint(home_region.region_name)
 
     contexts = run(["fn", "list", "contexts"]).stdout
     if context_name not in contexts:
@@ -231,8 +262,8 @@ def configure_fn_context(args, config, home_region, container_cli):
 
     run(["fn", "update", "context", "oracle.compartment-id", args.compartment_id])
     run(["fn", "update", "context", "oracle.image-compartment-id", args.image_compartment_id or args.compartment_id])
-    run(["fn", "update", "context", "api-url", "https://functions.{}.oci.oraclecloud.com".format(home_region.region_name)])
-    run(["fn", "update", "context", "registry", "{}.ocir.io/{}/limits".format(str(home_region.region_key).lower(), namespace)])
+    run(["fn", "update", "context", "api-url", api_url])
+    run(["fn", "update", "context", "registry", registry_path])
 
     if args.skip_docker_login:
         print("[INFO] Skipping docker login. Make sure the current environment can push to OCIR.")
@@ -246,7 +277,7 @@ def configure_fn_context(args, config, home_region, container_cli):
         raise RuntimeError("Provide an OCIR auth token with the hidden prompt, -password_env, or -password.")
 
     run(
-        [container_cli, "login", "-u", args.user, "--password-stdin", "{}.ocir.io".format(str(home_region.region_key).lower())],
+        [container_cli, "login", "-u", args.user, "--password-stdin", registry_host],
         stdin=password,
     )
 

@@ -131,12 +131,12 @@ When `-password` is omitted, the script prompts for the OCIR auth token without 
 After deployment, remove any saved OCIR registry credentials from Cloud Shell if you do not want the container engine to keep them on disk:
 
 ```bash
-docker logout cdg.ocir.io 2>/dev/null || true
-podman logout cdg.ocir.io 2>/dev/null || true
+docker logout <ocir_registry_host> 2>/dev/null || true
+podman logout <ocir_registry_host> 2>/dev/null || true
 unset OCIR_TOKEN
 ```
 
-This removes the local Docker or Podman login for `cdg.ocir.io`.
+This removes the local Docker or Podman login for the registry host used by the deployment script, such as `ocir.eu-paris-1.oci.oraclecloud.com` in OC1 or `ocir.eu-frankfurt-2.oci.oraclecloud.eu` in OC19.
 
 For example, the OCIR user format is:
 
@@ -212,7 +212,7 @@ compartment_ids = {
 
 By default, Terraform also creates a private VCN for Functions. It does not create a public subnet or internet gateway. The private subnet routes same-region Oracle service traffic through a service gateway to `All <region> Services In Oracle Services Network`.
 
-Because the function can check every subscribed OCI region from one home-region function, Terraform also creates a NAT gateway by default. This keeps the subnet private while allowing outbound HTTPS to cross-region OCI API endpoints such as `limits.eu-frankfurt-1.oci.oraclecloud.com`.
+Because the function can check every subscribed OCI region from one home-region function, Terraform also creates a NAT gateway by default. This keeps the subnet private while allowing outbound HTTPS to cross-region OCI API endpoints such as `limits.eu-frankfurt-1.oci.oraclecloud.com` in OC1 or `limits.eu-frankfurt-2.oci.oraclecloud.eu` in OC19.
 
 If you only check the function home region and do not need outbound public HTTPS, you can disable NAT creation:
 
@@ -288,6 +288,8 @@ python3 deployment.py \
   -max_workers 8
 ```
 
+The deployment script derives the Functions API URL and OCIR registry host from the home region's realm. For example, OC1 Frankfurt uses `https://functions.eu-frankfurt-1.oci.oraclecloud.com` and `ocir.eu-frankfurt-1.oci.oraclecloud.com`, while EU Sovereign Cloud Frankfurt uses `https://functions.eu-frankfurt-2.oci.oraclecloud.eu` and `ocir.eu-frankfurt-2.oci.oraclecloud.eu`.
+
 To customize when the function runs, add `-recurrence_type` and `-recurrence_details` to the deployment command. For example, daily at `07:00 UTC`:
 
 ```bash
@@ -308,18 +310,38 @@ The deployment script reads `OCIR_TOKEN` by default when `-password` is omitted.
 After deployment, remove any saved OCIR registry credentials from Cloud Shell if you do not want the container engine to keep them on disk:
 
 ```bash
-docker logout cdg.ocir.io 2>/dev/null || true
-podman logout cdg.ocir.io 2>/dev/null || true
+docker logout <ocir_registry_host> 2>/dev/null || true
+podman logout <ocir_registry_host> 2>/dev/null || true
 unset OCIR_TOKEN
 ```
 
-This removes the local Docker or Podman login for `cdg.ocir.io`.
+This removes the local Docker or Podman login for the registry host used by the deployment script.
 
 If Cloud Shell is already authenticated to push to OCIR, omit `-user` and add:
 
 ```bash
 -skip_docker_login
 ```
+
+## OCI Sovereign Cloud and Non-OC1 Realms
+
+The runtime function and deployment script are realm-aware when the OCI SDK and Terraform provider know the target region. For Oracle EU Sovereign Cloud, use an OC19 tenancy and one of the OC19 region identifiers, for example `eu-frankfurt-2` or `eu-madrid-2`. An OC1 tenancy such as `ocid1.tenancy.oc1..` cannot be pointed at OC19 regions.
+
+For EU Sovereign Cloud endpoints, OCI uses the pattern:
+
+```text
+https://<service_api_name>.<region>.oci.oraclecloud.eu
+```
+
+For example:
+
+```text
+https://limits.eu-frankfurt-2.oci.oraclecloud.eu
+https://functions.eu-frankfurt-2.oci.oraclecloud.eu
+ocir.eu-frankfurt-2.oci.oraclecloud.eu/<tenancy_namespace>/limits
+```
+
+If you target a newly released or private realm region that your local OCI SDK, OCI CLI, Fn CLI, or Terraform provider does not recognize yet, add region metadata with `OCI_REGION_METADATA` or `~/.oci/regions-config.json`, or upgrade the relevant toolchain.
 
 From a local machine, use the local Fn provider:
 
