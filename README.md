@@ -64,11 +64,11 @@ python3 -m pip install -r serverless/deployment/requirements.txt --user
 Create and edit your local Terraform variables file:
 
 ```bash
-cp terraform/sofiane.tfvars.example terraform/sofiane.tfvars
-vi terraform/sofiane.tfvars
+cp terraform/example.tfvars terraform/local.tfvars
+vi terraform/local.tfvars
 ```
 
-In Cloud Shell, use Cloud Shell auth in `terraform/sofiane.tfvars`:
+In Cloud Shell, use Cloud Shell auth in `terraform/local.tfvars`:
 
 ```hcl
 provider_oci = {
@@ -85,7 +85,7 @@ Deploy the Terraform resources:
 ```bash
 cd terraform
 terraform init -upgrade
-terraform plan -var-file sofiane.tfvars -out tfplan
+terraform plan -var-file local.tfvars -out tfplan
 terraform apply tfplan
 ```
 
@@ -166,16 +166,16 @@ This section is useful for local deployments or for adjusting the Terraform vari
 Create your local variables file from the example, then edit it:
 
 ```bash
-cp terraform/sofiane.tfvars.example terraform/sofiane.tfvars
+cp terraform/example.tfvars terraform/local.tfvars
 ```
 
-Edit `terraform/sofiane.tfvars`:
+Edit `terraform/local.tfvars`:
 
 ```hcl
 provider_oci = {
   tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
   region              = "eu-amsterdam-1"
-  config_file_profile = "SOFIANE"
+  config_file_profile = "DEFAULT"
   auth                = "ApiKey"
 }
 
@@ -235,7 +235,7 @@ Apply Terraform:
 ```bash
 cd terraform
 terraform init -upgrade
-terraform plan -var-file sofiane.tfvars -out tfplan
+terraform plan -var-file local.tfvars -out tfplan
 terraform apply tfplan
 ```
 
@@ -349,8 +349,8 @@ From a local machine, use the local Fn provider:
 cd serverless/deployment
 python deployment.py \
   -auth api_key \
-  -profile SOFIANELS \
-  -config_file 'C:/Users/Sofiane Mahdjoubi/.oci/config' \
+  -profile DEFAULT \
+  -config_file '~/.oci/config' \
   -fn_provider oracle \
   -user '<tenancy_namespace>/<user_email>' \
   -compartment_id '<project_compartment_id>' \

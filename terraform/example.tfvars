@@ -1,13 +1,28 @@
-// Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
-// Licensed under the Universal Permissive License v 1.0 as shown at https://oss.oracle.com/licenses/upl.
-
 provider_oci = {
-  tenancy             = "ocid1.tenancy.oc1.."
-  region              = "eu-amsterdam-1"
+  tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+  region              = "eu-paris-1"
   config_file_path    = "~/.oci/config"
   config_file_profile = "DEFAULT"
   auth                = "ApiKey"
 }
+
+# For OCI Cloud Shell, use instance principal auth instead:
+# provider_oci = {
+#   tenancy             = "ocid1.tenancy.oc1..replace-with-your-tenancy-ocid"
+#   region              = "eu-frankfurt-1"
+#   config_file_path    = ""
+#   config_file_profile = ""
+#   auth                = "InstancePrincipal"
+# }
+#
+# For Oracle EU Sovereign Cloud, use an OC19 tenancy and OC19 region:
+# provider_oci = {
+#   tenancy             = "ocid1.tenancy.oc19..replace-with-your-tenancy-ocid"
+#   region              = "eu-frankfurt-2"
+#   config_file_path    = "~/.oci/config"
+#   config_file_profile = "DEFAULT"
+#   auth                = "ApiKey"
+# }
 
 create_project_compartment      = true
 project_compartment_key         = "limit_monitoring"
@@ -16,8 +31,9 @@ project_compartment_description = "Resources for OCI limit monitoring."
 
 compartment_ids = {}
 
-create_network          = true
-network_compartment_key = "limit_monitoring"
+create_network            = true
+enable_private_nat_egress = true
+network_compartment_key   = "limit_monitoring"
 network = {
   vcn_name                   = "limit-monitoring-vcn"
   vcn_cidr                   = "10.42.0.0/16"
@@ -37,6 +53,9 @@ app_params = {
   }
 }
 
+enable_function_invocation_logs            = true
+function_invocation_log_retention_duration = 30
+
 topic_params = {
   "limit-monitoring-topic" = {
     comp_name   = "limit_monitoring"
@@ -48,7 +67,7 @@ topic_params = {
 subscription_params = {
   email = {
     comp_name  = "limit_monitoring"
-    endpoint   = "replace-me@example.com"
+    endpoint   = "replace-with-your-email@example.com"
     protocol   = "EMAIL"
     topic_name = "limit-monitoring-topic"
   }

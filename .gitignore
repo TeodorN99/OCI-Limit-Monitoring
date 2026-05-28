@@ -3,4 +3,5 @@
 .terraform
 terraform/tfplan
 terraform/*.tfplan
-terraform/sofiane.tfvars
+terraform/*.tfvars
+!terraform/example.tfvars
